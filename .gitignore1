@@ -1,0 +1,40 @@
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report
+import pandas as pd
+import numpy as np
+file_path = "C:\\Users\\HASEE\\Downloads\\原始数据_按序号_广东省微短剧市场受众需求与发展策略问卷调查_962份1_副本5.xlsx"
+df = pd.read_excel(file_path, sheet_name='Sheet1')
+# 选取自变量和因变量
+X = df[['1. 您的性别', '2.您的年龄', '4.您目前的最高教育程度是', '5.您的月平均收入为（如果您是学生，则您的月平均生活费为）',
+        '9.您每周观看微短剧的频率为', '10.您每次观看微短剧的时长是',
+        '11.您喜欢观看哪些题材的微短剧（多选）(爱情)', '11(喜剧)', '11(悬疑)', '11(古装)', '11(都市生活)',
+        '12.吸引您观看微短剧的原因是（多选）(剧情紧凑)', '12(演员阵容)', '12(题材新颖)', '12(时长短，方便观看)',
+        '12(打发时间)']]
+y = df['14.您是否愿意为观看微短剧付费']
+
+# 处理自变量 X 中的无穷大值
+X = X.replace([np.inf, -np.inf], np.nan)
+
+# 处理自变量 X 中的缺失值，这里使用均值填充
+X = X.fillna(X.mean())
+
+# 处理因变量 y 中的缺失值，这里使用众数填充
+y = y.fillna(y.mode()[0])
+
+# 创建逻辑回归模型
+model = LogisticRegression(max_iter=1000)
+
+# 拟合模型
+model.fit(X, y)
+
+# 进行预测
+y_pred = model.predict(X)
+
+# 输出模型评估报告
+print(classification_report(y, y_pred))
+
+# 输出模型系数和截距
+coefficients = pd.DataFrame(model.coef_, columns=X.columns)
+print("系数：")
+print(coefficients)
+print("截距：", model.intercept_)
