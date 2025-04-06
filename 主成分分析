@@ -1,0 +1,59 @@
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+from factor_analyzer import FactorAnalyzer
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# 读取数据
+df = pd.read_excel('/mnt/原始数据_按序号_广东省微短剧市场受众需求与发展策略问卷调查_962份1_副本5.xlsx',
+                   sheet_name='原始数据')
+
+# 提取要分析的列
+columns = ['17.您认为微短剧目前存在哪些问题（多选）(剧情低质)', '17(制作粗糙)', '17(内容同质化严重)', '17(广告过多)',
+           '17(其他)', '18.您认为微短剧需要在哪些方面进行改进（多选）(剧情内容)', '18(创新题材)', '18(制作水平)',
+           '18(广告植入)', '18(其他)']
+data = df[columns]
+
+# 数据标准化
+scaler = StandardScaler()
+scaled_data = scaler.fit_transform(data)
+scaled_df = pd.DataFrame(scaled_data, columns=data.columns)
+
+# 进行 KMO 和 Bartlett 检验
+from factor_analyzer.factor_analyzer import calculate_kmo, calculate_bartlett_sphericity
+
+kmo_all, kmo_model = calculate_kmo(scaled_df)
+chi_square_value, p_value = calculate_bartlett_sphericity(scaled_df)
+print(f"KMO 值: {kmo_model}")
+print(f"Bartlett 球形检验的卡方值: {chi_square_value}, p 值: {p_value}")
+
+# 创建因子分析器对象
+fa = FactorAnalyzer(n_factors=1, rotation=None)
+fa.fit(scaled_df)
+
+# 获取特征值和方差解释率
+ev, v = fa.get_eigenvalues()
+print("特征值:", ev)
+variance = fa.get_factor_variance()
+print("方差解释率:", variance)
+
+# 绘制碎石图
+plt.scatter(range(1, scaled_df.shape[1] + 1), ev)
+plt.plot(range(1, scaled_df.shape[1] + 1), ev)
+plt.title('Scree Plot')
+plt.xlabel('Factors')
+plt.ylabel('Eigenvalue')
+plt.grid()
+plt.show()
+
+# 获取因子载荷
+loadings = fa.loadings_
+loadings_df = pd.DataFrame(loadings, index=scaled_df.columns, columns=['Factor 1'])
+print("因子载荷:")
+print(loadings_df)
+
+# 绘制热力图
+plt.figure(figsize=(10, 8))
+sns.heatmap(loadings_df, annot=True, cmap='viridis')
+plt.title('Factor Loadings Heatmap')
+plt.show()
