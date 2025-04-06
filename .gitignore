@@ -1,0 +1,34 @@
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from sklearn.impute import SimpleImputer
+import pandas as pd
+file_path = "C:\\Users\\HASEE\\Downloads\\原始数据_按序号_广东省微短剧市场受众需求与发展策略问卷调查_962份1_副本5.xlsx"
+df = pd.read_excel(file_path, sheet_name='Sheet1')
+# 提取相关列
+columns = ['11.您喜欢观看哪些题材的微短剧（多选）(爱情)', '11(喜剧)', '11(悬疑)', '11(古装)', '11(都市生活)', '11(其他)',
+           '12.吸引您观看微短剧的原因是（多选）(剧情紧凑)', '12(演员阵容)', '12(题材新颖)', '12(时长短，方便观看)', '12(打发时间)', '12(其他)']
+cluster_data = df[columns]
+
+# 使用 SimpleImputer 填充 NaN 值为 0
+imputer = SimpleImputer(strategy='constant', fill_value=0)
+cluster_data = imputer.fit_transform(cluster_data)
+
+# 数据标准化
+scaler = StandardScaler()
+scaled_data = scaler.fit_transform(cluster_data)
+
+# 确定聚类的簇数，这里是2簇
+n_clusters = 2
+
+# 使用 K-Means 进行聚类
+kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+cluster_labels = kmeans.fit_predict(scaled_data)
+
+# 将聚类结果添加到原始数据中
+df['Cluster_Label'] = cluster_labels
+
+# 查看不同聚类簇的特征（以平均值为例）
+cluster_features = df.groupby('Cluster_Label')[columns].mean().round(2)
+
+print('不同聚类簇的特征：')
+cluster_features
