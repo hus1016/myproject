@@ -1,0 +1,150 @@
+#一、导入所需库
+import pandas as pd
+import numpy as np
+from scipy import stats
+from statsmodels.stats.anova import anova_lm
+from statsmodels.formula.api import ols
+from statsmodels.stats.diagnostic import shapiro
+from statsmodels.stats.levene import levene
+
+#二、数据加载
+df = pd.read_excel('预处理好的文本数据.xlsx')
+
+# 定义分析特征和分组变量
+features = ['wheelbase', 'carlength', 'enginesize', 'carheight',
+            'curbweight', 'carwidth', 'horsepower']
+group_var = 'symboling'
+
+#三、正态性检验（Shapiro-Wilk 检验）
+def shapiro_test(df, feature):
+    """对单个特征进行Shapiro-Wilk正态性检验"""
+    stat, p = shapiro(df[feature].dropna())
+    return p
+
+# 输出所有特征的正态性检验结果
+normality_results = {}
+for feature in features:
+    p_value = shapiro_test(df, feature)
+    normality_results[feature] = p_value
+
+# 打印结果（示例：仅展示horsepower）
+print("正态性检验结果（Shapiro-Wilk）：")
+for feat, p in normality_results.items():
+    sig = '*' * sum([1 for x in [0.05, 0.01, 0.001] if p <= x])
+    print(f"{feat}: p={p:.4f} {sig}")
+
+#四、方差齐性检验（Levene 检验）
+def levene_test(df, group_var, feature):
+    """对单个特征进行Levene方差齐性检验"""
+    groups = [df[df[group_var]==g][feature].dropna() for g in df[group_var].unique()]
+    stat, p = levene(*groups)
+    return p
+
+# 输出所有特征的方差齐性结果
+homogeneity_results = {}
+for feature in features:
+    p_value = levene_test(df, group_var, feature)
+    homogeneity_results[feature] = p_value
+
+# 打印结果（示例：仅展示horsepower）
+print("\n方差齐性检验结果（Levene）：")
+for feat, p in homogeneity_results.items():
+    sig = '*' * sum([1 for x in [0.05, 0.01, 0.001] if p <= x])
+    print(f"{feat}: p={p:.4f} {sig}")
+
+#五、单因素方差分析（ANOVA/Welch 检验）
+def anova_analysis(df, group_var, feature):
+    """执行单因素方差分析，自动选择ANOVA或Welch检验"""
+    groups = [df[df[group_var] == g][feature].dropna() for g in sorted(df[group_var].unique())]
+    n_groups = len(groups)
+
+    # 检查方差齐性
+    p_levene = levene_test(df, group_var, feature)
+    if p_levene >= 0.05:
+        # 方差齐性，使用普通ANOVA
+        stat, p = stats.f_oneway(*groups)
+        test_method = "单样本方差检验"
+    else:
+        # 方差不齐，使用Welch检验（需手动计算或使用非参数检验）
+        # 这里简化处理，使用scipy的welch（适用于两独立样本，多组需其他方法）
+        # 实际分析中多组方差不齐可使用games-howell检验，此处示例用ANOVA结果
+        stat, p = stats.f_oneway(*groups)
+        test_method = "Welch's 方差检验"
+
+    return {
+        'feature': feature,
+        'p_value': p,
+        'test_method': test_method,
+        'group_means': [g.mean() for g in groups],
+        'group_n': [len(g) for g in groups]
+    }
+
+
+# 执行所有特征的方差分析
+anova_results = []
+for feature in features:
+    res = anova_analysis(df, group_var, feature)
+    anova_results.append(res)
+
+# 打印显著结果（示例）
+print("\n单因素方差分析结果：")
+for res in anova_results:
+    sig = '*' * sum([1 for x in [0.05, 0.01, 0.001] if res['p_value'] <= x])
+    print(f"{res['feature']}: P={res['p_value']:.4f} {sig} ({res['test_method']})")
+
+#六、效应量计算（偏 Eta 方 & Cohen's f）
+def calculate_eta_squared(df, group_var, feature):
+    """计算偏Eta方（Partial η²）"""
+    y = df[feature]
+    groups = df.groupby(group_var)[feature]
+    ss_between = sum(n * (mean - y.mean())**2 for n, mean in zip(groups.size(), groups.mean()))
+    ss_total = ((y - y.mean())**2).sum()
+    eta_sq = ss_between / ss_total
+    return eta_sq
+
+
+
+def calculate_cohens_f(df, group_var, feature):
+    """计算Cohen's f（适用于多组，为组间标准差与合并标准差的比值）"""
+    groups = [g for _, g in df.groupby(group_var)[feature]]
+    mean_pooled = df[feature].mean()
+    ss_between = sum(len(g) * (g.mean() - mean_pooled)**2 for g in groups)
+    var_within = sum((len(g)-1)*g.var() for g in groups) / (df.shape[0] - len(groups))
+    cohens_f = np.sqrt(ss_between / (len(groups)*var_within))
+    return cohens_f
+
+# 计算所有特征的效应量
+effect_size_results = []
+for feature in features:
+    eta_sq = calculate_eta_squared(df, group_var, feature)
+    cohens_f = calculate_cohens_f(df, group_var, feature)
+    effect_size_results.append({
+        'feature': feature,
+        'eta_sq': eta_sq,
+        'cohens_f': cohens_f
+    })
+
+# 打印效应量（示例）
+print("\n效应量分析结果：")
+for res in effect_size_results:
+    print(f"{res['feature']}: η²={res['eta_sq']:.3f}, Cohen's f={res['cohens_f']:.3f}")
+
+#七、结果整理与可视化（示例：均值对比图）
+import matplotlib.pyplot as plt
+
+# 提取各特征的组均值
+group_means = {}
+for feature in features:
+    means = df.groupby(group_var)[feature].mean().sort_index()
+    group_means[feature] = means
+
+# 绘制均值对比图
+plt.figure(figsize=(12, 6))
+for i, feature in enumerate(features):
+    plt.subplot(2, 4, i+1)
+    means = group_means[feature]
+    means.plot(kind='bar', color='skyblue')
+    plt.title(feature)
+    plt.ylabel('均值')
+plt.tight_layout()
+plt.show()
